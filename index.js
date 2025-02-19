@@ -1,24 +1,29 @@
 require('dotenv').config();
+
 const express = require('express');
 const app = express();
 const jwt = require('jsonwebtoken');
 app.use(express.json());
 const cors = require('cors');
-app.use(cors());
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+app.use(cors(
+  // {
+  //   origin: ['http://localhost:5173',
+  //     'https://microjob-90188.web.app'
+      
+  //   ],
+  //   credentials: true,
+  //   optionalSuccessStatus: 200
+  // }
+));
 
 const post = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
-// Se97DeXnaSdNlTwI
-
-// microjobs
 
 
 
 
-//const uri = "mongodb+srv://microjobs:Se97DeXnaSdNlTwI@cluster0.ntkoo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
-
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ntkoo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -39,12 +44,29 @@ async function run() {
    
     // await client.connect();
 
+    app.post('/create-payment-intent', async(req,res)=>{
+      const {amount } = req.body;
+      const price = parseInt(amount*100);
+      console.log(req.body);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount:price,
+        currency:'usd',
+        payment_method_types:['card']
+      })
+
+      console.log(paymentIntent);
+
+      res.send({
+        clientSecret:paymentIntent.client_secret
+      })
+    })
+
 
     const verifyToken = (req, res,next)=>{
-      console.log('Inside verify token', req.headers?.authorization);
+     
 
       if(!req.headers.authorization){
-        console.log('caught khaici');
+       
          res.status(401).send({message:'unauthorized access'});
       }
       else{
@@ -57,7 +79,7 @@ async function run() {
              return  res.status(403).send({message:'Forbidden access'})
             }
 
-            console.log('Par hoyeci');
+            
            
               req.decoded = decoded;
               next();
@@ -140,6 +162,7 @@ async function run() {
     
     app.get('/tasks/:email',verifyToken,verifyBuyer, async(req,res)=>{
       const email = req.params.email;
+      console.log('Buyer clicked');
       const tasks = await taskTable.find({addedBy:email}).toArray();
    
       res.send(tasks);
@@ -337,7 +360,7 @@ async function run() {
 
 
     app.get('/requests',async(req,res)=>{
-        const requests = await withdrawalTable.find({status:'pending'}).toArray();
+        const requests = await withdrawalTable.find().toArray();
         res.send(requests)
     })
 
@@ -368,8 +391,14 @@ async function run() {
 
     app.get('/pendingJobs/:email', async(req,res)=>{
       const email = req.params.email;
-      const tasks = await orderTable.find({buyerEmail:email , status:'panding'}).toArray();
+      const query = {
+        buyerEmail:email,
+        status:'panding'
+      }
       
+      // const tasks = await orderTable.find({buyerEmail:email, status:'panding' }).toArray();
+      const tasks = await orderTable.find(query).toArray()
+      console.log(tasks);
       res.send(tasks)
     })
 
@@ -387,7 +416,7 @@ async function run() {
       res.send(workers)
     })
 
-    app.get('/jobs',verifyToken, async(req,res)=>{
+    app.get('/jobs', async(req,res)=>{
       const filter = {
         $expr: { $gt: [{ $toInt: "$worker" }, 0] }
       };
@@ -445,7 +474,7 @@ async function run() {
         email:job.worker_email
       }
 
-      const newCoin = parseInt(job.amount)
+      const newCoin = parseInt(job?.amount)
       const updatedCoin = newCoin+coin;
       console.log('Updated coin', updatedCoin);
       const updatedUser = {
@@ -461,6 +490,7 @@ async function run() {
 
     app.patch('/orderAccept/:id',async(req,res)=>{
       const id = req.params.id;
+      console.log('Hot krece');
       const job = req.body;
       const filter = {
         _id:new ObjectId(id)
@@ -471,6 +501,7 @@ async function run() {
         }
       }
       const result = await orderTable.updateOne(filter, updatedJob);
+      console.log(result);
       res.send(result);
     })
 
